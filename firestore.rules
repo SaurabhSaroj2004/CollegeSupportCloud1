@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Users can read and write their own document
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admins can read all user documents
+      allow read: if isAdmin();
+    }
+    
+    // Services collection
+    match /services/{serviceId} {
+      // Anyone can read services (even unauthenticated users)
+      allow read: if true;
+      
+      // Only admins can create, update, or delete services
+      allow create, update, delete: if isAdmin();
+      
+      // Only admins can verify services
+      allow update: if isAdmin() && 
+                      request.resource.data.verified == true;
+    }
+    
+    // Feedback collection (optional)
+    match /feedback/{feedbackId} {
+      // Anyone authenticated can read feedback
+      allow read: if isAuthenticated();
+      
+      // Users can create feedback
+      allow create: if isAuthenticated() && 
+                      request.resource.data.createdBy == request.auth.uid;
+      
+      // Users can update/delete their own feedback
+      allow update, delete: if isAuthenticated() && 
+                              resource.data.createdBy == request.auth.uid;
+      
+      // Admins can do everything
+      allow read, write: if isAdmin();
+    }
+  }
+}
